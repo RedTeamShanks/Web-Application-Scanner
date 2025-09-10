@@ -73,4 +73,5 @@ def make_reports(job):
             reports['pdf'] = ('report.pdf', io.BytesIO(pdf_bytes))
         except Exception as e:
             print(f"[!] PDF generation failed: {e}")
-            return reports
+
+        return reports
