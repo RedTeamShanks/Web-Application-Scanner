@@ -57,7 +57,7 @@ def virustotal():
         return jsonify({"error": "No URL provided"}), 400
 
     url_id = base64.urlsafe_b64encode(url.encode()).decode().strip('=')
-    headers = {"x-apikey": "b9cb803db3ed2889375e3135f36bbf5772f197a88c933f0071bca0a331106c98"}
+    headers = {"x-apikey": "YOUR API KEY "}
     vt_resp = requests.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers=headers)
 
     if vt_resp.status_code != 200:
@@ -107,3 +107,4 @@ def report(scan_id):
 
 if __name__ == '__main__':
     app.run(debug=True, threaded=True)
+
