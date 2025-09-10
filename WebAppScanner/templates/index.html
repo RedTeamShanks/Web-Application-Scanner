@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🔍 Web Vulnerability Scanner</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50 font-sans p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    <h1 class="text-3xl font-bold text-center">🔍 Web Vulnerability Scanner</h1>
+
+    <!-- Scan Controls -->
+    <div class="flex items-center gap-4 flex-wrap">
+      <input type="text" id="targetUrl" placeholder="Target URL" class="border p-2 flex-1 rounded-lg" value="">
+      <input type="number" id="depth" placeholder="Depth" value="1" class="border p-2 w-24 rounded-lg">
+      <button onclick="startScan()" class="bg-blue-600 text-white px-4 py-2 rounded-lg">Start Scan</button>
+      <button onclick="stopScan()" class="bg-red-600 text-white px-4 py-2 rounded-lg">Stop Scan</button>
+      <button onclick="clearScan()" class="bg-gray-500 text-white px-4 py-2 rounded-lg">Clear</button>
+    </div>
+
+    <!-- Live Log -->
+    <div>
+      <h2 class="text-xl font-semibold mb-2">📡 Live Scan Log</h2>
+      <textarea id="scanLog" class="w-full h-48 border p-2 rounded-lg font-mono text-sm" readonly></textarea>
+    </div>
+
+    <!-- Vulnerabilities -->
+    <div>
+      <h2 class="text-xl font-semibold mb-2">⚠️ Vulnerabilities</h2>
+      <ul id="vulnList" class="space-y-2 max-h-64 overflow-auto border p-2 rounded-lg bg-white"></ul>
+    </div>
+
+    <!-- Charts -->
+    <div class="grid grid-cols-2 gap-6">
+      <div>
+        <h2 class="text-xl font-semibold mb-2">📊 Vulnerability Count (Bar chart)</h2>
+        <canvas id="barChart"></canvas>
+      </div>
+      <div>
+        <h2 class="text-xl font-semibold mb-2">🍩 Severity Distribution (Donut Chart)</h2>
+        <canvas id="donutChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Report Download -->
+    <div class="flex items-center gap-3">
+      <select id="reportFormat" class="border p-2 rounded-lg">
+        <option value="html">HTML</option>
+        <option value="pdf">PDF</option>
+        <option value="csv">CSV</option>
+        <option value="json">JSON</option>
+      </select>
+      <button onclick="downloadReport()" class="bg-green-600 text-white px-4 py-2 rounded-lg">Download Report</button>
+    </div>
+  </div>
+
+  <!-- Vulnerability Modal -->
+  <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-lg shadow-lg w-96">
+      <h3 id="vulnTitle" class="text-xl font-bold mb-2"></h3>
+      <p><b>URL:</b> <span id="vulnUrl"></span></p>
+      <p><b>Parameters:</b> <span id="vulnParams"></span></p>
+      <p><b>Payload:</b> <span id="vulnPayload"></span></p>
+      <p><b>Severity:</b> <span id="vulnSeverity"></span></p>
+      <p><b>VirusTotal:</b> <span id="vulnVT">Checking...</span></p>
+      <button onclick="closeModal()" class="mt-4 bg-gray-600 text-white px-4 py-2 rounded-lg">Close</button>
+    </div>
+  </div>
+
+  <script>
+let scanId = null;
+let eventSource = null;
+
+// Charts data
+let vulnTypes = {};
+let vulnSeverity = {};
+let barChart = null;
+let donutChart = null;
+
+function addLog(message) {
+  const log = document.getElementById("scanLog");
+  log.value += message + "\n";
+  log.scrollTop = log.scrollHeight;
+}
+
+function updateCharts() {
+  const types = Object.keys(vulnTypes);
+  const counts = Object.values(vulnTypes);
+  const severities = Object.keys(vulnSeverity);
+  const sevCounts = Object.values(vulnSeverity);
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById("barChart"), {
+    type: "bar",
+    data: {
+      labels: types,
+      datasets: [{ label: 'Vulnerabilities', data: counts, backgroundColor: 'rgba(54, 162, 235, 0.7)' }]
+    },
+    options: { responsive: true}
+  });
+
+  if (donutChart) donutChart.destroy();
+  donutChart = new Chart(document.getElementById("donutChart"), {
+    type: "doughnut",
+    data: {
+      labels: severities,
+      datasets: [{
+        data: sevCounts,
+        backgroundColor: ['#FF6384','#FFCE56','#36A2EB','#4BC0C0','#9966FF']
+      }]
+    },
+    options: { responsive: true , animation : false  }
+  });
+}
+
+function addVulnerability(vuln) {
+  const list = document.getElementById("vulnList");
+  const li = document.createElement("li");
+  li.className = "cursor-pointer text-blue-600 underline";
+  li.innerText = `${vuln.type.toUpperCase()} - ${vuln.url} - ${vuln.severity}`;
+  li.onclick = () => showVulnDetails(vuln);
+  list.appendChild(li);
+
+  // Update charts
+  vulnTypes[vuln.type] = (vulnTypes[vuln.type] || 0) + 1;
+  vulnSeverity[vuln.severity] = (vulnSeverity[vuln.severity] || 0) + 1;
+  updateCharts();
+}
+
+function showVulnDetails(vuln) {
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("vulnTitle").innerText = vuln.type.toUpperCase();
+  document.getElementById("vulnUrl").innerHTML = `<a href="${vuln.url}" target="_blank" class="text-blue-600 underline">${vuln.url}</a>`;
+  document.getElementById("vulnParams").innerText = vuln.params || "None";
+  document.getElementById("vulnPayload").innerText = vuln.payload || "None";
+  document.getElementById("vulnSeverity").innerText = vuln.severity;
+  document.getElementById("vulnVT").innerText = "Checking...";
+
+  // VirusTotal check
+  checkVirusTotal(vuln.url).then(result => {
+    document.getElementById("vulnVT").innerText = result;
+  }).catch(err => {
+    document.getElementById("vulnVT").innerText = "Error";
+    console.error(err);
+  });
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+}
+
+// Clear everything
+function clearScan() {
+  document.getElementById("scanLog").value = "";
+  document.getElementById("vulnList").innerHTML = "";
+  vulnTypes = {};
+  vulnSeverity = {};
+  updateCharts();
+}
+
+async function startScan() {
+  const url = document.getElementById("targetUrl").value;
+  const depth = document.getElementById("depth").value;
+
+  let res = await fetch("/start_scan", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `start_url=${encodeURIComponent(url)}&max_depth=${depth}`
+  });
+
+  let data = await res.json();
+  scanId = data.scan_id;
+  addLog("🚀 Scan started: " + scanId);
+  document.getElementById("vulnList").innerHTML = "";
+
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(`/stream/${scanId}`);
+
+  eventSource.onmessage = function(e) {
+    if (e.data === "__SCAN_COMPLETE__") {
+      addLog("✅ Scan finished.");
+      eventSource.close();
+      return;
+    }
+
+    const raw = e.data;
+    const line = raw.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, "").trim();
+
+    if (line.startsWith("VULN_JSON:")) {
+    try {
+      let jsonpart = line.substring("VULN_JSON:".length).trim();
+      if (jsonpart.endsWith("]")) jsonpart = jsonpart.slice(0, -1).trim();
+      const vuln = JSON.parse(jsonpart);
+      vuln.params = vuln.params ?? "None";
+      vuln.payload = vuln.payload ?? "None";
+      addVulnerability(vuln);
+      return;
+    } catch (err) {
+      console.error("Failed to parse vuln JSON:", err, line);
+    }
+}
+
+
+
+    if (line.startsWith("VULN:")) {
+      try {
+      const regex = /VULN:\s+(\S+)\s+(\S+)(?:\s+params:(.*?))?(?:\s+payload:(.*?))?\s+sev:\s*([A-Za-z-]+)/;
+      const match = line.match(regex);
+
+        if (match) {
+          addVulnerability({
+            type: match[1],
+            url: match[2],
+            params: (match[3] || "None").trim(),
+            payload: (match[4] || "None").trim(),
+            severity: match[5]
+          });
+          return;
+        }
+      } catch (err) {
+        console.error("Regex parsing failed:", err, line);
+      }
+    }
+      addLog(e.data);
+  };
+}
+
+async function stopScan() {
+  if (!scanId) return;
+  await fetch(`/stop_scan/${scanId}`, { method: "POST" });
+  addLog("⏹️ Scan stopped.");
+  if (eventSource) eventSource.close();
+}
+
+function downloadReport() {
+  if (!scanId) return alert("No scan running");
+  const format = document.getElementById("reportFormat").value;
+  window.location.href = `/report/${scanId}?format=${format}`;
+}
+
+
+async function checkVirusTotal(url) {
+  const res = await fetch("/virustotal", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `url=${encodeURIComponent(url)}`
+  });
+  const data = await res.json();
+  return data.result || "No data";
+}
+
+  </script>
+</body>
+</html>
