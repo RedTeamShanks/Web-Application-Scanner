@@ -53,7 +53,6 @@ web_vuln_scanner/
 │   ├── payloads.py         # Injection payloads & severity mapping
 │   ├── report.py           # Report generation (JSON/CSV/HTML/PDF)
 │   └── logger.py           # Logging of vulnerabilities and evidence
-├── static/                 # CSS/JS (Charts, styling)
 ├── templates/              # HTML templates (Flask UI)
 ├── requirements.txt        # Dependencies
 └── README.md               # Documentation
