@@ -141,6 +141,13 @@ python app.py
 }
 ```
 
+RESULTS:
+
+<img width="1106" height="894" alt="image" src="https://github.com/user-attachments/assets/6f5c45f7-9734-41f7-97ac-d84cde5e1266" />
+---
+<img width="1078" height="788" alt="image" src="https://github.com/user-attachments/assets/5a563f92-1570-433f-88a9-a770bf1164a0" />
+
+
 ---
 
 ## 🔎 Active Scans
